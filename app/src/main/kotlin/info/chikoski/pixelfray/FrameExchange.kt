@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import java.util.concurrent.atomic.AtomicReference
 

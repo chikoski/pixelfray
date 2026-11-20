@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

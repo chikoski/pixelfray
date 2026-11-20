@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera.baselineprofile
+package info.chikoski.pixelfray.baselineprofile
 
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.StartupMode
@@ -34,8 +34,8 @@ import org.junit.runners.Parameterized
  * from API 29: run this on a device or emulator with API 29 or later.
  *
  * Run with:
- * ./gradlew -p samples/android-glitch-camera :baselineprofile:connectedBenchmarkReleaseAndroidTest \
- *   -Pandroid.testInstrumentationRunnerArguments.class=com.example.wasm2kt.glitchcamera.baselineprofile.FramePipelineBenchmark
+ * ./gradlew :baselineprofile:connectedBenchmarkReleaseAndroidTest \
+ *   -Pandroid.testInstrumentationRunnerArguments.class=info.chikoski.pixelfray.baselineprofile.FramePipelineBenchmark
  */
 @OptIn(ExperimentalMetricApi::class)
 @LargeTest
@@ -68,8 +68,8 @@ class FramePipelineBenchmark(private val resolution: String) {
             },
         ) {
             startActivityAndWait { intent ->
-                intent.putExtra("com.example.wasm2kt.glitchcamera.SYNTHETIC_FRAMES", FRAME_COUNT)
-                intent.putExtra("com.example.wasm2kt.glitchcamera.SYNTHETIC_RESOLUTION", resolution)
+                intent.putExtra("info.chikoski.pixelfray.SYNTHETIC_FRAMES", FRAME_COUNT)
+                intent.putExtra("info.chikoski.pixelfray.SYNTHETIC_RESOLUTION", resolution)
             }
             // GlitchViewModel.SYNTHETIC_RUN_DONE, shown once the last frame was presented.
             val done = device.wait(Until.hasObject(By.text("Synthetic frames done")), 180_000)
@@ -78,7 +78,7 @@ class FramePipelineBenchmark(private val resolution: String) {
     }
 
     companion object {
-        private const val TARGET_PACKAGE = "com.example.wasm2kt.glitchcamera"
+        private const val TARGET_PACKAGE = "info.chikoski.pixelfray"
         private const val FRAME_COUNT = 120
 
         /** `CameraResolutionOption` names. */

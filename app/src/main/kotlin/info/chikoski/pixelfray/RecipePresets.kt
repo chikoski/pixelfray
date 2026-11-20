@@ -1,8 +1,8 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.ParamInfo
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.ParamKind
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.ParamInfo
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.ParamKind
 import java.util.Locale
 
 data class RecipePreset(

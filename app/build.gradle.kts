@@ -70,11 +70,11 @@ val downloadSelfieSegmenterModel = tasks.register<DownloadSelfieSegmenterTask>("
 }
 
 android {
-    namespace = "com.example.wasm2kt.glitchcamera"
+    namespace = "info.chikoski.pixelfray"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.wasm2kt.glitchcamera"
+        applicationId = "info.chikoski.pixelfray"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -114,7 +114,7 @@ wasm2kt {
     components {
         register("pngGlitch") {
             source.set(file("src/main/wasm/png-glitch-component.wasm"))
-            packageName.set("com.example.wasm2kt.glitchcamera.pngglitch")
+            packageName.set("info.chikoski.pixelfray.pngglitch")
         }
     }
 }
@@ -152,7 +152,7 @@ androidComponents {
 
 baselineProfile {
     // Generating the profile needs a device or an emulator. Pass
-    // -PgenerateBaselineProfileOnBuild=false to build a release without one (as samples/android).
+    // -PgenerateBaselineProfileOnBuild=false to build a release without one.
     automaticGenerationDuringBuild = providers.gradleProperty("generateBaselineProfileOnBuild")
         .map { it.toBoolean() }
         .getOrElse(true)

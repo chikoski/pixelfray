@@ -1,20 +1,20 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
-import com.example.wasm2kt.glitchcamera.pngglitch.PngglitchComponent
-import com.example.wasm2kt.glitchcamera.pngglitch.Session as WorldSession
-import com.example.wasm2kt.glitchcamera.pngglitch.WitResult
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.Format
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.GlitchError
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.listFilters
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.validateRecipe
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.ColorType
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.Encoding
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.FilterStrategy
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.FilterType
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.SeedMode
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.Session as LiveSession
-import com.example.wasm2kt.glitchcamera.pngglitch.openSession
+import info.chikoski.pixelfray.pngglitch.PngglitchComponent
+import info.chikoski.pixelfray.pngglitch.Session as WorldSession
+import info.chikoski.pixelfray.pngglitch.WitResult
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.Format
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.GlitchError
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.listFilters
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.validateRecipe
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.ColorType
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.Encoding
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.FilterStrategy
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.FilterType
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.SeedMode
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.Session as LiveSession
+import info.chikoski.pixelfray.pngglitch.openSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

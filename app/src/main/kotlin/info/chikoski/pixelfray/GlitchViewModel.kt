@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -7,8 +7,8 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageProxy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.SeedMode
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.SeedMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -647,7 +647,7 @@ class GlitchViewModel : ViewModel() {
                 _uiState.update { state ->
                     state.copy(
                         statusMessage = saveResult.fold(
-                            onSuccess = { "Saved PNG (${pngBytes.size / 1024} KB) to Pictures/GlitchCamera" },
+                            onSuccess = { "Saved PNG (${pngBytes.size / 1024} KB) to Pictures/Pixelfray" },
                             onFailure = { "PNG save failed: ${it.message}" },
                         ),
                     )
@@ -678,7 +678,7 @@ class GlitchViewModel : ViewModel() {
                             _uiState.update { state ->
                                 state.copy(
                                     statusMessage = saveRes.fold(
-                                        onSuccess = { "Saved MP4 video to Movies/GlitchCamera" },
+                                        onSuccess = { "Saved MP4 video to Movies/Pixelfray" },
                                         onFailure = { "MP4 save failed: ${it.message}" },
                                     ),
                                 )

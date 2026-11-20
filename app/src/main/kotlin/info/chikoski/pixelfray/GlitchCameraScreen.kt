@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -85,10 +85,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.ParamInfo
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.glitch.ParamKind
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.SeedMode
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.ParamInfo
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.ParamKind
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.SeedMode
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlin.math.max

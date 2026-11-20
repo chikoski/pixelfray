@@ -1,10 +1,10 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
-import com.example.wasm2kt.glitchcamera.pngglitch.PngglitchComponent
-import com.example.wasm2kt.glitchcamera.pngglitch.WitResult
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.SeedMode
-import com.example.wasm2kt.glitchcamera.pngglitch.exports.chikoski.png_glitch.live.Session as LiveSession
-import com.example.wasm2kt.glitchcamera.pngglitch.openSession
+import info.chikoski.pixelfray.pngglitch.PngglitchComponent
+import info.chikoski.pixelfray.pngglitch.WitResult
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.SeedMode
+import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.live.Session as LiveSession
+import info.chikoski.pixelfray.pngglitch.openSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

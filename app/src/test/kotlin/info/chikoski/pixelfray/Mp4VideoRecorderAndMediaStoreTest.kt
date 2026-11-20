@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import android.media.MediaCodec
 import org.junit.Assert.assertEquals

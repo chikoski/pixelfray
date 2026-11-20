@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.wasm2kt.glitchcamera.baselineprofile"
+    namespace = "info.chikoski.pixelfray.baselineprofile"
     compileSdk = 35
 
     defaultConfig {

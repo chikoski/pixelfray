@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame

@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import android.app.KeyguardManager
 import android.os.Build
@@ -51,12 +51,12 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        const val EXTRA_BENCHMARK_WARMUP = "com.example.wasm2kt.glitchcamera.BENCHMARK_WARMUP"
+        const val EXTRA_BENCHMARK_WARMUP = "info.chikoski.pixelfray.BENCHMARK_WARMUP"
 
         /** Number of synthetic frames to run through the pipeline instead of the camera (benchmarks). */
-        const val EXTRA_SYNTHETIC_FRAMES = "com.example.wasm2kt.glitchcamera.SYNTHETIC_FRAMES"
+        const val EXTRA_SYNTHETIC_FRAMES = "info.chikoski.pixelfray.SYNTHETIC_FRAMES"
 
         /** [CameraResolutionOption] name for [EXTRA_SYNTHETIC_FRAMES]; 540p when absent. */
-        const val EXTRA_SYNTHETIC_RESOLUTION = "com.example.wasm2kt.glitchcamera.SYNTHETIC_RESOLUTION"
+        const val EXTRA_SYNTHETIC_RESOLUTION = "info.chikoski.pixelfray.SYNTHETIC_RESOLUTION"
     }
 }

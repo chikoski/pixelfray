@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera.baselineprofile
+package info.chikoski.pixelfray.baselineprofile
 
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,7 +19,7 @@ class BaselineProfileGenerator {
     @Test
     fun generate() {
         val targetPackage = InstrumentationRegistry.getArguments().getString("targetAppId")
-            ?: "com.example.wasm2kt.glitchcamera"
+            ?: "info.chikoski.pixelfray"
 
         rule.collect(
             packageName = targetPackage,
@@ -29,7 +29,7 @@ class BaselineProfileGenerator {
             device.executeShellCommand("wm dismiss-keyguard")
             pressHome()
             startActivityAndWait { intent ->
-                intent.putExtra("com.example.wasm2kt.glitchcamera.BENCHMARK_WARMUP", true)
+                intent.putExtra("info.chikoski.pixelfray.BENCHMARK_WARMUP", true)
             }
             device.wait(Until.hasObject(By.descContains("ms/frame")), 10_000)
             device.waitForIdle()

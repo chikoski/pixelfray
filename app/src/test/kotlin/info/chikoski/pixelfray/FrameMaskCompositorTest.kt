@@ -1,4 +1,4 @@
-package com.example.wasm2kt.glitchcamera
+package info.chikoski.pixelfray
 
 import com.google.mediapipe.proto.CalculatorProto
 import com.google.mediapipe.tasks.core.CpuSelfieSegmenterGraph
