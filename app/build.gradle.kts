@@ -133,7 +133,7 @@ dependencies {
     implementation("androidx.camera:camera-core:$cameraVersion")
     implementation("androidx.camera:camera-camera2:$cameraVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraVersion")
-    implementation("com.google.mediapipe:tasks-vision:0.10.21")
+    implementation("com.google.mediapipe:tasks-vision:1.2.3")
 
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     "baselineProfile"(project(":baselineprofile"))
