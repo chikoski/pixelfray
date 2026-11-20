@@ -12,3 +12,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Updating third_party/png-glitch requires rebuilding app/src/main/wasm/png-glitch-component.wasm
+    # via ./build-wasm.sh, so leave it out of automated Dependabot submodule bumps.
+    ignore:
+      - dependency-name: "third_party/png-glitch"

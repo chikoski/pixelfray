@@ -4,7 +4,7 @@
 
 ## 関連 Issue
 
-関連する Issue を「Closes #番号」または「Refs #番号」の形式で記載します。
+関連する Issue を `Closes #番号` または `Refs #番号` の形式で記載します。
 
 Closes #
 
