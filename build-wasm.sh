@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PNG_GLITCH_DIR="${PNG_GLITCH_DIR:-/Users/chikoski/png-glitch}"
+PNG_GLITCH_DIR="${PNG_GLITCH_DIR:-$SCRIPT_DIR/third_party/png-glitch}"
 WASM_TOOLS_BIN="${WASM_TOOLS_BIN:-wasm-tools}"
 if ! command -v "$WASM_TOOLS_BIN" >/dev/null 2>&1 && [[ -x "$HOME/.cargo/bin/wasm-tools" ]]; then
   WASM_TOOLS_BIN="$HOME/.cargo/bin/wasm-tools"

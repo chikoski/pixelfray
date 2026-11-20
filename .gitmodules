@@ -1,0 +1,6 @@
+[submodule "third_party/wasm-component-kotlin"]
+	path = third_party/wasm-component-kotlin
+	url = https://github.com/chikoski/wasm-component-kotlin.git
+[submodule "third_party/png-glitch"]
+	path = third_party/png-glitch
+	url = https://github.com/chikoski/png-glitch.git
