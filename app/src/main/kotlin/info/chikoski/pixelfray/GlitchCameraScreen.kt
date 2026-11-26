@@ -6,7 +6,15 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Rect as AndroidRect
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Size
+import android.view.Display
+import android.view.Surface
+import android.view.View
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,19 +48,24 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -98,8 +111,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
@@ -164,6 +179,20 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
     var showFilterSheet by rememberSaveable { mutableStateOf(false) }
     var showEngineSettingsSheet by rememberSaveable { mutableStateOf(false) }
     var boundCamera by remember { mutableStateOf<Camera?>(null) }
+    var boundAnalysis by remember { mutableStateOf<ImageAnalysis?>(null) }
+    val displayRotation = rememberDisplayRotation()
+    var recordingLockedRotation by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(state.isRecording, displayRotation) {
+        if (state.isRecording) {
+            if (recordingLockedRotation == null) {
+                recordingLockedRotation = displayRotation
+            }
+        } else {
+            recordingLockedRotation = null
+        }
+    }
+    val effectiveTargetRotation = recordingLockedRotation ?: displayRotation
+    val latestTargetRotation by rememberUpdatedState(effectiveTargetRotation)
 
     val hasCameraPermissionState = remember {
         mutableStateOf(
@@ -205,9 +234,11 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
 
     if (hasCameraPermission && !state.isBenchmarkWarmup) {
         DisposableEffect(lifecycleOwner, state.lensFacing, state.resolution) {
+            var disposed = false
             val providerFuture = ProcessCameraProvider.getInstance(context)
             val mainExecutor = ContextCompat.getMainExecutor(context)
             val listener = Runnable {
+                if (disposed) return@Runnable
                 val cameraProvider = runCatching { providerFuture.get() }.getOrNull() ?: return@Runnable
                 // The processing sizes are 16:9. Without an aspect ratio strategy CameraX prefers
                 // 4:3 for ImageAnalysis, and may deliver frames much larger than needed (such as
@@ -225,6 +256,7 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
 
                 val analysis = ImageAnalysis.Builder()
                     .setResolutionSelector(resolutionSelector)
+                    .setTargetRotation(latestTargetRotation)
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                     .build()
@@ -239,17 +271,26 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
                 runCatching {
                     cameraProvider.unbindAll()
                     boundCamera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, analysis)
+                    boundAnalysis = analysis
                 }
             }
             providerFuture.addListener(listener, mainExecutor)
 
             onDispose {
+                disposed = true
+                boundAnalysis = null
                 boundCamera = null
-                runCatching {
-                    providerFuture.get().unbindAll()
+                if (providerFuture.isDone) {
+                    runCatching {
+                        providerFuture.get().unbindAll()
+                    }
                 }
             }
         }
+    }
+
+    LaunchedEffect(boundAnalysis, effectiveTargetRotation) {
+        boundAnalysis?.targetRotation = effectiveTargetRotation
     }
 
     LaunchedEffect(boundCamera, state.zoomOption) {
@@ -268,26 +309,30 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
     val minHingeGapPx = with(density) { TABLETOP_MIN_HINGE_GAP_DP.dp.roundToPx() }
     val minPaneHeightPx = with(density) { TABLETOP_MIN_PANE_HEIGHT_DP.dp.roundToPx() }
 
-    var contentTopInWindowPx by remember { mutableIntStateOf(0) }
-    var contentHeightPx by remember { mutableIntStateOf(0) }
+    var rootTopInWindowPx by remember { mutableIntStateOf(0) }
+    var rootHeightPx by remember { mutableIntStateOf(0) }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(ColorBgPrimary)
-            .systemBarsPadding(),
+            .systemBarsPadding()
+            .onGloballyPositioned { coords ->
+                rootTopInWindowPx = coords.positionInWindow().y.roundToInt()
+                rootHeightPx = coords.size.height
+            },
     ) {
         val tabletopSplit = remember(
             hingeBounds,
-            contentTopInWindowPx,
-            contentHeightPx,
+            rootTopInWindowPx,
+            rootHeightPx,
             minHingeGapPx,
             minPaneHeightPx,
         ) {
             hingeBounds?.let { bounds ->
                 computeTabletopSplitPx(
-                    contentTopPx = contentTopInWindowPx,
-                    contentHeightPx = contentHeightPx,
+                    contentTopPx = rootTopInWindowPx,
+                    contentHeightPx = rootHeightPx,
                     hingeTopPx = bounds.top,
                     hingeBottomPx = bounds.bottom,
                     minHingeGapPx = minHingeGapPx,
@@ -332,29 +377,27 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
                 .fillMaxSize()
                 .then(if (hideMainSemanticsForModal) Modifier.clearAndSetSemantics {} else Modifier),
         ) {
-            PixelfrayAppBar(
-                actionDescription = when {
-                    layoutMode != PixelfrayLayoutMode.COMPACT -> "エンジン設定"
-                    showFilterSheet -> "フィルターを閉じる"
-                    else -> "フィルターを開く"
-                },
-                onActionClick = {
-                    if (layoutMode == PixelfrayLayoutMode.COMPACT) {
-                        showFilterSheet = !showFilterSheet
-                    } else {
-                        showEngineSettingsSheet = true
-                    }
-                },
-            )
+            if (shouldShowAppBar(layoutMode)) {
+                PixelfrayAppBar(
+                    actionDescription = when {
+                        layoutMode != PixelfrayLayoutMode.COMPACT -> "エンジン設定"
+                        showFilterSheet -> "フィルターを閉じる"
+                        else -> "フィルターを開く"
+                    },
+                    onActionClick = {
+                        if (layoutMode == PixelfrayLayoutMode.COMPACT) {
+                            showFilterSheet = !showFilterSheet
+                        } else {
+                            showEngineSettingsSheet = true
+                        }
+                    },
+                )
+            }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .onGloballyPositioned { coords ->
-                        contentTopInWindowPx = coords.positionInWindow().y.roundToInt()
-                        contentHeightPx = coords.size.height
-                    },
+                    .weight(1f),
             ) {
                 when (layoutMode) {
                     PixelfrayLayoutMode.COMPACT -> {
@@ -430,16 +473,14 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
                         val split = tabletopSplit ?: return@Box
                         val topPaneDp = with(density) { split.topPanePx.toDp() }
                         val hingeGapDp = with(density) { split.hingeGapPx.toDp() }
-                        val bottomPaneDp = with(density) { split.bottomPanePx.toDp() }
 
                         Column(modifier = Modifier.fillMaxSize()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(topPaneDp)
-                                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
+                                    .height(topPaneDp),
                             ) {
-                                movablePreviewPane(20.dp, Modifier.fillMaxSize())
+                                movablePreviewPane(0.dp, Modifier.fillMaxSize())
                             }
 
                             Box(
@@ -452,7 +493,7 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(bottomPaneDp)
+                                    .weight(1f)
                                     .padding(16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                             ) {
@@ -533,6 +574,53 @@ private tailrec fun Context.findComponentActivity(): ComponentActivity? = when (
     is ComponentActivity -> this
     is ContextWrapper -> baseContext.findComponentActivity()
     else -> null
+}
+
+private fun resolveDisplayRotation(context: Context, view: View): Int {
+    view.display?.rotation?.let { return it }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        runCatching { context.display.rotation }.getOrNull()?.let { return it }
+    }
+    @Suppress("DEPRECATION")
+    val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+    @Suppress("DEPRECATION")
+    return wm?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+}
+
+@Composable
+private fun rememberDisplayRotation(): Int {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val configuration = LocalConfiguration.current
+    var rotation by remember { mutableIntStateOf(resolveDisplayRotation(context, view)) }
+
+    LaunchedEffect(configuration, context, view) {
+        rotation = resolveDisplayRotation(context, view)
+    }
+
+    DisposableEffect(context, view) {
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        if (displayManager == null) {
+            onDispose {}
+        } else {
+            val listener = object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) = Unit
+                override fun onDisplayRemoved(displayId: Int) = Unit
+                override fun onDisplayChanged(displayId: Int) {
+                    val currentDisplayId = view.display?.displayId ?: Display.DEFAULT_DISPLAY
+                    if (displayId == currentDisplayId) {
+                        rotation = resolveDisplayRotation(context, view)
+                    }
+                }
+            }
+            displayManager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+            onDispose {
+                displayManager.unregisterDisplayListener(listener)
+            }
+        }
+    }
+
+    return rotation
 }
 
 @Composable
@@ -638,80 +726,90 @@ private fun CameraPreviewPane(
 
         RuleOfThirdsGrid(modifier = Modifier.fillMaxSize())
 
-        // Top-left resolution and subject pass dropdown pills
-        Row(
+        Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 14.dp, start = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxSize()
+                .windowInsetsPadding(
+                    WindowInsets.displayCutout.only(
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Top,
+                    ),
+                ),
         ) {
-            ResolutionDropdownPill(
-                selected = resolution,
-                onSelect = onSelectResolution,
-            )
-
-            EffectPassDropdownPill(
-                selected = effectPass,
-                segmentationStatus = segmentationStatus,
-                onSelect = onSelectEffectPass,
-            )
-        }
-
-        // Top-right FPS badge pill
-        FpsBadgePill(
-            previewFrame = previewFrame,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 18.dp, end = 16.dp),
-        )
-
-        if (showPermissionPrompt) {
-            Surface(
-                color = ColorSurfaceDark.copy(alpha = 0.92f),
-                shape = RoundedCornerShape(14.dp),
+            // Top-left resolution and subject pass dropdown pills
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 56.dp, start = 16.dp)
-                    .clickable(onClick = onRequestPermission),
+                    .padding(top = 14.dp, start = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "カメラ権限を許可",
-                    color = ColorAccentLime,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                ResolutionDropdownPill(
+                    selected = resolution,
+                    onSelect = onSelectResolution,
+                )
+
+                EffectPassDropdownPill(
+                    selected = effectPass,
+                    segmentationStatus = segmentationStatus,
+                    onSelect = onSelectEffectPass,
                 )
             }
-        }
 
-        statusMessage?.let { msg ->
-            Surface(
-                color = ColorSurfaceDark.copy(alpha = 0.92f),
-                shape = RoundedCornerShape(12.dp),
+            // Top-right FPS badge pill
+            FpsBadgePill(
+                previewFrame = previewFrame,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 68.dp)
-                    .widthIn(max = 240.dp),
-            ) {
-                Text(
-                    text = msg,
-                    color = ColorTextPrimary,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
-            }
-        }
+                    .align(Alignment.TopEnd)
+                    .padding(top = 18.dp, end = 16.dp),
+            )
 
-        LensZoomSelectorPill(
-            selected = zoomOption,
-            onSelect = onSelectZoom,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp),
-        )
+            if (showPermissionPrompt) {
+                Surface(
+                    color = ColorSurfaceDark.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(top = 56.dp, start = 16.dp)
+                        .clickable(onClick = onRequestPermission),
+                ) {
+                    Text(
+                        text = "カメラ権限を許可",
+                        color = ColorAccentLime,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+
+            statusMessage?.let { msg ->
+                Surface(
+                    color = ColorSurfaceDark.copy(alpha = 0.92f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, bottom = 68.dp)
+                        .widthIn(max = 240.dp),
+                ) {
+                    Text(
+                        text = msg,
+                        color = ColorTextPrimary,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+
+            LensZoomSelectorPill(
+                selected = zoomOption,
+                onSelect = onSelectZoom,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp),
+            )
+        }
     }
 }
 
