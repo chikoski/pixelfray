@@ -75,3 +75,6 @@ fun resolveLayoutMode(
     maxWidthDp >= MEDIUM_PLUS_MIN_WIDTH_DP -> PixelfrayLayoutMode.MEDIUM_PLUS
     else -> PixelfrayLayoutMode.COMPACT
 }
+
+fun shouldShowAppBar(layoutMode: PixelfrayLayoutMode): Boolean =
+    layoutMode != PixelfrayLayoutMode.TABLETOP
