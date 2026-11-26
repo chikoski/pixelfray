@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel: GlitchViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val barColor = 0xFF101211.toInt()
+        val barColor = 0xFF0F1310.toInt()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(barColor),
             navigationBarStyle = SystemBarStyle.dark(barColor),

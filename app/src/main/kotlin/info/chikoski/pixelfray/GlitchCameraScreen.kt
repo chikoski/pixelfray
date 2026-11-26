@@ -1,9 +1,14 @@
 package info.chikoski.pixelfray
 
 import android.Manifest
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Rect as AndroidRect
 import android.util.Size
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
@@ -13,6 +18,11 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.AndroidExternalSurface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -21,18 +31,22 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,9 +54,13 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -55,36 +73,54 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
 import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.FilterInfo
 import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.ParamInfo
 import info.chikoski.pixelfray.pngglitch.exports.chikoski.png_glitch.glitch.ParamKind
@@ -94,43 +130,42 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-private val ColorBgPrimary = Color(0xFF101211)
-private val ColorCameraSurface = Color(0xFF1B211E)
-private val ColorOverlayPill = Color(0xFF171D17)
-private val ColorAccentLime = Color(0xFFE1EDB0)
-private val ColorOnAccentDark = Color(0xFF20271A)
-private val ColorStudioSurface = Color(0xFF171A18)
-private val ColorStatusBadgeBg = Color(0xFF2C3527)
-private val ColorSegmentedBg = Color(0xFF262B25)
+private val ColorBgPrimary = Color(0xFF0F1310)
+private val ColorSurfaceDark = Color(0xFF1B211A)
+private val ColorSurfaceElevated = Color(0xFF2B3327)
+private val ColorAccentLime = Color(0xFFE1EDAE)
+private val ColorOnAccentDark = Color(0xFF0F1310)
+private val ColorTextPrimary = Color(0xFFF4F5ED)
+private val ColorTextSecondary = Color(0xFFB1BAA8)
+private val ColorDragHandle = Color(0xFF64705D)
+private val ColorModalBackdrop = Color.Black.copy(alpha = 0.28f)
+private val ColorHingeKeepClear = Color(0xFF050605)
+private val ColorRecordAccent = Color(0xFFFF826F)
 private val ColorDivider = Color(0xFF30372F)
 private val ColorTrackInactive = Color(0xFF3C433B)
-private val ColorCaptureSecondary = Color(0xFF252925)
-private val ColorRecordAccent = Color(0xFFFF826F)
-private val ColorTextPrimary = Color(0xFFF4F5EF)
-private val ColorTextHeader = Color(0xFFF1F3EC)
-private val ColorTextSecondary = Color(0xFFD8DED3)
-private val ColorTextPillUnselected = Color(0xFFD9E0D2)
-private val ColorTextResolutionLabel = Color(0xFFC6CFBD)
-private val ColorTextLensUnselected = Color(0xFFB4BDB3)
-private val ColorTextTabUnselected = Color(0xFFADB6A7)
-private val ColorTextCardUnselected = Color(0xFFABB4A7)
-private val ColorTextReset = Color(0xFFBCC6B5)
-private val ColorTextNote = Color(0xFF9BA594)
+
+private enum class CaptureControlsStyle {
+    COMPACT_BAR,
+    MEDIUM_PLUS_CARD,
+    TABLETOP_CARD,
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlitchCameraScreen(viewModel: GlitchViewModel) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val state by viewModel.uiState.collectAsState()
+    val uiState = viewModel.uiState.collectAsState()
+    val state = uiState.value
     // Not delegated: reading `previewFrame.value` here would recompose the whole screen on every
     // camera frame. Only the FPS badge and the frame statistics read it.
     val previewFrame = viewModel.previewFrame.collectAsState()
 
-    var showSettingsSheet by remember { mutableStateOf(false) }
+    var showFilterSheet by rememberSaveable { mutableStateOf(false) }
+    var showEngineSettingsSheet by rememberSaveable { mutableStateOf(false) }
     var boundCamera by remember { mutableStateOf<Camera?>(null) }
 
-    var hasCameraPermission by remember {
+    val hasCameraPermissionState = remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
                 context,
@@ -138,6 +173,7 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
             ) == PackageManager.PERMISSION_GRANTED,
         )
     }
+    var hasCameraPermission by hasCameraPermissionState
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -227,108 +263,256 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
         }
     }
 
+    val hingeBounds = rememberHorizontalHalfOpenedHinge()
+    val density = LocalDensity.current
+    val minHingeGapPx = with(density) { TABLETOP_MIN_HINGE_GAP_DP.dp.roundToPx() }
+    val minPaneHeightPx = with(density) { TABLETOP_MIN_PANE_HEIGHT_DP.dp.roundToPx() }
+
+    var contentTopInWindowPx by remember { mutableIntStateOf(0) }
+    var contentHeightPx by remember { mutableIntStateOf(0) }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(ColorBgPrimary)
             .systemBarsPadding(),
     ) {
-        val isFoldableLayout = maxWidth >= 600.dp
+        val tabletopSplit = remember(
+            hingeBounds,
+            contentTopInWindowPx,
+            contentHeightPx,
+            minHingeGapPx,
+            minPaneHeightPx,
+        ) {
+            hingeBounds?.let { bounds ->
+                computeTabletopSplitPx(
+                    contentTopPx = contentTopInWindowPx,
+                    contentHeightPx = contentHeightPx,
+                    hingeTopPx = bounds.top,
+                    hingeBottomPx = bounds.bottom,
+                    minHingeGapPx = minHingeGapPx,
+                    minPaneHeightPx = minPaneHeightPx,
+                )
+            }
+        }
+        val layoutMode = resolveLayoutMode(maxWidth.value, tabletopSplit)
 
-        Column(modifier = Modifier.fillMaxSize()) {
-            PixelfrayAppBar(
-                onOpenSettings = { showSettingsSheet = true },
-            )
+        LaunchedEffect(layoutMode) {
+            if (layoutMode != PixelfrayLayoutMode.COMPACT) {
+                showFilterSheet = false
+            }
+        }
 
-            if (isFoldableLayout) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    LiveCameraSection(
-                        resolution = state.resolution,
-                        effectPass = state.effectPass,
-                        segmentationStatus = state.segmentationStatus,
-                        zoomOption = state.zoomOption,
-                        isRecording = state.isRecording,
-                        statusMessage = state.statusMessage,
-                        showPermissionPrompt = !hasCameraPermission && !state.isBenchmarkWarmup,
-                        previewFrame = previewFrame,
-                        previewRenderer = viewModel.previewRenderer,
-                        isFoldable = true,
-                        onRequestPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                        onSelectResolution = viewModel::selectResolution,
-                        onSelectEffectPass = viewModel::selectEffectPass,
-                        onSelectZoom = viewModel::selectZoom,
-                        onToggleRecording = { viewModel.toggleVideoRecording(context) },
-                        onCapturePng = { viewModel.captureStillPng(context) },
-                        onToggleLens = viewModel::toggleCameraLens,
-                        modifier = Modifier
-                            .weight(580f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(20.dp)),
-                    )
-
-                    FilterStudioSection(
-                        state = state,
-                        isFoldable = true,
-                        onSelectControlMode = viewModel::selectControlMode,
-                        onSelectPreset = viewModel::selectPreset,
-                        onSelectFilter = viewModel::selectSingleFilter,
-                        onUpdateParam = viewModel::updateFilterParam,
-                        onResetParams = viewModel::resetFilterParams,
-                        modifier = Modifier
-                            .weight(372f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(20.dp)),
-                    )
-                }
-            } else {
-                LiveCameraSection(
-                    resolution = state.resolution,
-                    effectPass = state.effectPass,
-                    segmentationStatus = state.segmentationStatus,
-                    zoomOption = state.zoomOption,
-                    isRecording = state.isRecording,
-                    statusMessage = state.statusMessage,
-                    showPermissionPrompt = !hasCameraPermission && !state.isBenchmarkWarmup,
+        val movablePreviewPane = remember {
+            movableContentOf { cornerRadius: Dp, paneModifier: Modifier ->
+                val currentState = uiState.value
+                CameraPreviewPane(
+                    resolution = currentState.resolution,
+                    effectPass = currentState.effectPass,
+                    segmentationStatus = currentState.segmentationStatus,
+                    zoomOption = currentState.zoomOption,
+                    statusMessage = currentState.statusMessage,
+                    showPermissionPrompt = !hasCameraPermissionState.value && !currentState.isBenchmarkWarmup,
                     previewFrame = previewFrame,
                     previewRenderer = viewModel.previewRenderer,
-                    isFoldable = false,
+                    cornerRadius = cornerRadius,
                     onRequestPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) },
                     onSelectResolution = viewModel::selectResolution,
                     onSelectEffectPass = viewModel::selectEffectPass,
                     onSelectZoom = viewModel::selectZoom,
-                    onToggleRecording = { viewModel.toggleVideoRecording(context) },
-                    onCapturePng = { viewModel.captureStillPng(context) },
-                    onToggleLens = viewModel::toggleCameraLens,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.46f),
-                )
-
-                FilterStudioSection(
-                    state = state,
-                    isFoldable = false,
-                    onSelectControlMode = viewModel::selectControlMode,
-                    onSelectPreset = viewModel::selectPreset,
-                    onSelectFilter = viewModel::selectSingleFilter,
-                    onUpdateParam = viewModel::updateFilterParam,
-                    onResetParams = viewModel::resetFilterParams,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.54f),
+                    modifier = paneModifier,
                 )
             }
         }
 
-        if (showSettingsSheet) {
+        val hideMainSemanticsForModal = layoutMode == PixelfrayLayoutMode.COMPACT && showFilterSheet
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (hideMainSemanticsForModal) Modifier.clearAndSetSemantics {} else Modifier),
+        ) {
+            PixelfrayAppBar(
+                actionDescription = when {
+                    layoutMode != PixelfrayLayoutMode.COMPACT -> "エンジン設定"
+                    showFilterSheet -> "フィルターを閉じる"
+                    else -> "フィルターを開く"
+                },
+                onActionClick = {
+                    if (layoutMode == PixelfrayLayoutMode.COMPACT) {
+                        showFilterSheet = !showFilterSheet
+                    } else {
+                        showEngineSettingsSheet = true
+                    }
+                },
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .onGloballyPositioned { coords ->
+                        contentTopInWindowPx = coords.positionInWindow().y.roundToInt()
+                        contentHeightPx = coords.size.height
+                    },
+            ) {
+                when (layoutMode) {
+                    PixelfrayLayoutMode.COMPACT -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            movablePreviewPane(
+                                0.dp,
+                                Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                            )
+
+                            CaptureControlsPanel(
+                                style = CaptureControlsStyle.COMPACT_BAR,
+                                isRecording = state.isRecording,
+                                onToggleRecording = { viewModel.toggleVideoRecording(context) },
+                                onCapturePng = { viewModel.captureStillPng(context) },
+                                onToggleLens = viewModel::toggleCameraLens,
+                            )
+                        }
+                    }
+
+                    PixelfrayLayoutMode.MEDIUM_PLUS -> {
+                        val sidePanelWidth = (this@BoxWithConstraints.maxWidth * 0.33f).coerceIn(280.dp, 340.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 14.dp),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            movablePreviewPane(
+                                20.dp,
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                            )
+
+                            Column(
+                                modifier = Modifier
+                                    .width(sidePanelWidth)
+                                    .fillMaxHeight(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                FilterPanelContent(
+                                    state = state,
+                                    layoutMode = PixelfrayLayoutMode.MEDIUM_PLUS,
+                                    showDoneButton = false,
+                                    onDismiss = {},
+                                    onOpenEngineSettings = { showEngineSettingsSheet = true },
+                                    onSelectControlMode = viewModel::selectControlMode,
+                                    onSelectPreset = viewModel::selectPreset,
+                                    onSelectFilter = viewModel::selectSingleFilter,
+                                    onUpdateParam = viewModel::updateFilterParam,
+                                    onResetParams = viewModel::resetFilterParams,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(ColorSurfaceDark),
+                                )
+
+                                CaptureControlsPanel(
+                                    style = CaptureControlsStyle.MEDIUM_PLUS_CARD,
+                                    isRecording = state.isRecording,
+                                    onToggleRecording = { viewModel.toggleVideoRecording(context) },
+                                    onCapturePng = { viewModel.captureStillPng(context) },
+                                    onToggleLens = viewModel::toggleCameraLens,
+                                )
+                            }
+                        }
+                    }
+
+                    PixelfrayLayoutMode.TABLETOP -> {
+                        val split = tabletopSplit ?: return@Box
+                        val topPaneDp = with(density) { split.topPanePx.toDp() }
+                        val hingeGapDp = with(density) { split.hingeGapPx.toDp() }
+                        val bottomPaneDp = with(density) { split.bottomPanePx.toDp() }
+
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(topPaneDp)
+                                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
+                            ) {
+                                movablePreviewPane(20.dp, Modifier.fillMaxSize())
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(hingeGapDp)
+                                    .background(ColorHingeKeepClear),
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(bottomPaneDp)
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                FilterPanelContent(
+                                    state = state,
+                                    layoutMode = PixelfrayLayoutMode.TABLETOP,
+                                    showDoneButton = false,
+                                    onDismiss = {},
+                                    onOpenEngineSettings = { showEngineSettingsSheet = true },
+                                    onSelectControlMode = viewModel::selectControlMode,
+                                    onSelectPreset = viewModel::selectPreset,
+                                    onSelectFilter = viewModel::selectSingleFilter,
+                                    onUpdateParam = viewModel::updateFilterParam,
+                                    onResetParams = viewModel::resetFilterParams,
+                                    modifier = Modifier
+                                        .weight(568f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(ColorSurfaceDark),
+                                )
+
+                                CaptureControlsPanel(
+                                    style = CaptureControlsStyle.TABLETOP_CARD,
+                                    isRecording = state.isRecording,
+                                    onToggleRecording = { viewModel.toggleVideoRecording(context) },
+                                    onCapturePng = { viewModel.captureStillPng(context) },
+                                    onToggleLens = viewModel::toggleCameraLens,
+                                    modifier = Modifier
+                                        .weight(224f)
+                                        .fillMaxHeight(),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (layoutMode == PixelfrayLayoutMode.COMPACT) {
+            CompactFilterBottomSheetOverlay(
+                visible = showFilterSheet,
+                state = state,
+                onDismiss = { showFilterSheet = false },
+                onOpenEngineSettings = {
+                    showFilterSheet = false
+                    showEngineSettingsSheet = true
+                },
+                onSelectControlMode = viewModel::selectControlMode,
+                onSelectPreset = viewModel::selectPreset,
+                onSelectFilter = viewModel::selectSingleFilter,
+                onUpdateParam = viewModel::updateFilterParam,
+                onResetParams = viewModel::resetFilterParams,
+            )
+        }
+
+        if (showEngineSettingsSheet) {
             ModalBottomSheet(
-                onDismissRequest = { showSettingsSheet = false },
+                onDismissRequest = { showEngineSettingsSheet = false },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                containerColor = ColorStudioSurface,
+                containerColor = ColorSurfaceDark,
                 contentColor = ColorTextPrimary,
             ) {
                 EngineSettingsSheetContent(
@@ -345,204 +529,197 @@ fun GlitchCameraScreen(viewModel: GlitchViewModel) {
     }
 }
 
+private tailrec fun Context.findComponentActivity(): ComponentActivity? = when (this) {
+    is ComponentActivity -> this
+    is ContextWrapper -> baseContext.findComponentActivity()
+    else -> null
+}
+
+@Composable
+private fun rememberHorizontalHalfOpenedHinge(): AndroidRect? {
+    val activity = LocalContext.current.findComponentActivity() ?: return null
+    val hingeBounds by produceState<AndroidRect?>(initialValue = null, key1 = activity) {
+        WindowInfoTracker.getOrCreate(activity)
+            .windowLayoutInfo(activity)
+            .collect { layoutInfo ->
+                val feature = layoutInfo.displayFeatures
+                    .filterIsInstance<FoldingFeature>()
+                    .firstOrNull {
+                        it.state == FoldingFeature.State.HALF_OPENED &&
+                            it.orientation == FoldingFeature.Orientation.HORIZONTAL
+                    }
+                value = feature?.bounds
+            }
+    }
+    return hingeBounds
+}
+
 @Composable
 private fun PixelfrayAppBar(
-    onOpenSettings: () -> Unit,
+    actionDescription: String,
+    onActionClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(50.dp)
             .background(ColorBgPrimary)
-            .padding(horizontal = 24.dp),
+            .padding(start = 18.dp, end = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = "Pixelfray",
             color = ColorAccentLime,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
         )
 
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(48.dp)
                 .clip(CircleShape)
-                .clickable(onClick = onOpenSettings),
+                .clickable(onClick = onActionClick),
             contentAlignment = Alignment.Center,
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_settings),
-                contentDescription = "設定",
-                modifier = Modifier.size(22.dp),
+                contentDescription = actionDescription,
+                modifier = Modifier.size(23.dp),
             )
         }
     }
 }
 
 /**
- * The camera preview and its controls. It takes only the fields of [GlitchUiState] it shows (all
- * stable), so that changes elsewhere in the state, such as dragging a filter parameter slider,
+ * The camera preview and its overlay controls. It takes only the fields of [GlitchUiState] it shows
+ * (all stable), so that changes elsewhere in the state, such as dragging a filter parameter slider,
  * skip this section instead of recomposing it.
  */
 @Composable
-private fun LiveCameraSection(
+private fun CameraPreviewPane(
     resolution: CameraResolutionOption,
     effectPass: EffectTargetPass,
     segmentationStatus: SegmentationStatus,
     zoomOption: CameraZoomOption,
-    isRecording: Boolean,
     statusMessage: String?,
     showPermissionPrompt: Boolean,
     previewFrame: State<PreviewFrame>,
     previewRenderer: PreviewRenderer,
-    isFoldable: Boolean,
+    cornerRadius: Dp,
     onRequestPermission: () -> Unit,
     onSelectResolution: (CameraResolutionOption) -> Unit,
     onSelectEffectPass: (EffectTargetPass) -> Unit,
     onSelectZoom: (CameraZoomOption) -> Unit,
-    onToggleRecording: () -> Unit,
-    onCapturePng: () -> Unit,
-    onToggleLens: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    val shape = RoundedCornerShape(cornerRadius)
+    Box(
         modifier = modifier
+            .clip(shape)
             .clipToBounds()
-            .background(ColorCameraSurface),
+            .background(ColorSurfaceDark),
     ) {
-        Box(
+        // Frames are drawn into this surface by PreviewRenderer on the presentation thread
+        // (glitch-present), so a new frame involves neither recomposition nor a Compose draw
+        // pass.
+        AndroidExternalSurface(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clipToBounds()
-                .background(ColorCameraSurface),
+                .fillMaxSize()
+                .clipToBounds(),
         ) {
-            // Frames are drawn into this surface by PreviewRenderer on the presentation thread
-            // (glitch-present), so a new frame involves neither recomposition nor a Compose draw
-            // pass.
-            AndroidExternalSurface(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clipToBounds(),
-            ) {
-                previewRenderer.backgroundColor = ColorCameraSurface.toArgb()
-                onSurface { surface, width, height ->
-                    previewRenderer.attach(surface, width, height)
-                    surface.onChanged { newWidth, newHeight -> previewRenderer.resize(this, newWidth, newHeight) }
-                    surface.onDestroyed { previewRenderer.detach(this) }
-                }
-            }
-
-            // Preview contrast gradient overlay (node 2:30 / 2:74)
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0.0f to Color.Black.copy(alpha = 0.35f),
-                            0.4f to Color.Transparent,
-                            1.0f to Color.Black.copy(alpha = 0.35f),
-                        ),
-                    ),
-            )
-
-            // 3x3 rule-of-thirds grid overlay (nodes 2:31..2:34 / 2:75..2:78)
-            RuleOfThirdsGrid(modifier = Modifier.fillMaxSize())
-
-            // Resolution and effect pass selector pills (top-right stack)
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 12.dp, end = 16.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ResolutionSelectorPill(
-                    selected = resolution,
-                    onSelect = onSelectResolution,
-                )
-
-                EffectPassSelectorPill(
-                    selected = effectPass,
-                    segmentationStatus = segmentationStatus,
-                    onSelect = onSelectEffectPass,
-                )
-            }
-
-            if (showPermissionPrompt) {
-                Surface(
-                    color = ColorOverlayPill.copy(alpha = 0.9f),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(top = 12.dp, start = 16.dp)
-                        .clickable(onClick = onRequestPermission),
-                ) {
-                    Text(
-                        text = "カメラ権限を許可",
-                        color = ColorAccentLime,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
-            }
-
-            // Lens zoom selection pill (node 2:40 / 2:84)
-            LensZoomSelectorPill(
-                selected = zoomOption,
-                onSelect = onSelectZoom,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 15.dp),
-            )
-
-            // FPS badge pill (node 5:9 / 5:18)
-            FpsBadgePill(
-                previewFrame = previewFrame,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 15.dp, end = 16.dp),
-            )
-
-            statusMessage?.let { msg ->
-                Surface(
-                    color = ColorOverlayPill.copy(alpha = 0.92f),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, bottom = 50.dp)
-                        .widthIn(max = 240.dp),
-                ) {
-                    Text(
-                        text = msg,
-                        color = ColorTextPrimary,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
-                }
+            previewRenderer.backgroundColor = ColorSurfaceDark.toArgb()
+            onSurface { surface, width, height ->
+                previewRenderer.attach(surface, width, height)
+                surface.onChanged { newWidth, newHeight -> previewRenderer.resize(this, newWidth, newHeight) }
+                surface.onDestroyed { previewRenderer.detach(this) }
             }
         }
 
-        CaptureControlsBar(
-            isRecording = isRecording,
-            isFoldable = isFoldable,
-            onToggleRecording = onToggleRecording,
-            onCapturePng = onCapturePng,
-            onToggleLens = onToggleLens,
+        RuleOfThirdsGrid(modifier = Modifier.fillMaxSize())
+
+        // Top-left resolution and subject pass dropdown pills
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 14.dp, start = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ResolutionDropdownPill(
+                selected = resolution,
+                onSelect = onSelectResolution,
+            )
+
+            EffectPassDropdownPill(
+                selected = effectPass,
+                segmentationStatus = segmentationStatus,
+                onSelect = onSelectEffectPass,
+            )
+        }
+
+        // Top-right FPS badge pill
+        FpsBadgePill(
+            previewFrame = previewFrame,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 18.dp, end = 16.dp),
+        )
+
+        if (showPermissionPrompt) {
+            Surface(
+                color = ColorSurfaceDark.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 56.dp, start = 16.dp)
+                    .clickable(onClick = onRequestPermission),
+            ) {
+                Text(
+                    text = "カメラ権限を許可",
+                    color = ColorAccentLime,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+
+        statusMessage?.let { msg ->
+            Surface(
+                color = ColorSurfaceDark.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 68.dp)
+                    .widthIn(max = 240.dp),
+            ) {
+                Text(
+                    text = msg,
+                    color = ColorTextPrimary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+
+        LensZoomSelectorPill(
+            selected = zoomOption,
+            onSelect = onSelectZoom,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp),
         )
     }
 }
 
 @Composable
 private fun RuleOfThirdsGrid(modifier: Modifier = Modifier) {
-    val gridColor = Color.White.copy(alpha = 0.14f)
+    val gridColor = ColorTextPrimary.copy(alpha = 0.13f)
     Canvas(modifier = modifier) {
-        val strokePx = 1.dp.toPx()
+        val strokePx = 0.5.dp.toPx()
         val w = size.width
         val h = size.height
         drawLine(
@@ -573,46 +750,61 @@ private fun RuleOfThirdsGrid(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ResolutionSelectorPill(
+private fun ResolutionDropdownPill(
     selected: CameraResolutionOption,
     onSelect: (CameraResolutionOption) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(ColorOverlayPill)
-            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "解像度",
-            color = ColorTextResolutionLabel,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier.padding(end = 8.dp),
-        )
-        CameraResolutionOption.entries.forEach { option ->
-            val isSelected = option == selected
-            Box(
-                modifier = Modifier
-                    .width(60.dp)
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(if (isSelected) ColorAccentLime else ColorOverlayPill)
-                    .clickable { onSelect(option) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = option.label,
-                    color = if (isSelected) ColorOnAccentDark else ColorTextPillUnselected,
-                    fontSize = 12.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = 1,
-                    softWrap = false,
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .defaultMinSize(minWidth = 76.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(ColorSurfaceDark)
+                .clickable { expanded = true }
+                .padding(start = 12.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = selected.label,
+                color = ColorTextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Image(
+                painter = painterResource(id = R.drawable.ic_chevron_down),
+                contentDescription = "解像度を選択",
+                modifier = Modifier.size(12.dp),
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = ColorSurfaceDark,
+        ) {
+            CameraResolutionOption.entries.forEach { option ->
+                val isSelected = option == selected
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option.label,
+                            color = if (isSelected) ColorAccentLime else ColorTextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
                 )
             }
         }
@@ -620,47 +812,115 @@ private fun ResolutionSelectorPill(
 }
 
 @Composable
-private fun EffectPassSelectorPill(
+private fun EffectPassDropdownPill(
     selected: EffectTargetPass,
     segmentationStatus: SegmentationStatus,
     onSelect: (EffectTargetPass) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .height(44.dp)
-            .clip(RoundedCornerShape(22.dp))
-            .background(ColorOverlayPill)
-            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SegmentationStatusIcon(
-            status = segmentationStatus,
-            modifier = Modifier.padding(end = 6.dp),
-        )
-        EffectTargetPass.entries.forEach { option ->
-            val isSelected = option == selected
-            Box(
-                modifier = Modifier
-                    .defaultMinSize(minWidth = 44.dp)
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(if (isSelected) ColorAccentLime else ColorOverlayPill)
-                    .clickable { onSelect(option) }
-                    .padding(horizontal = 10.dp),
-                contentAlignment = Alignment.Center,
+    var expanded by remember { mutableStateOf(false) }
+    val statusDescription = segmentationStatusLabel(segmentationStatus)
+
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .defaultMinSize(minWidth = 76.dp)
+                .height(32.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(ColorSurfaceDark)
+                .clickable { expanded = true }
+                .padding(start = 12.dp, end = 10.dp)
+                .semantics { contentDescription = "${selected.label}（$statusDescription）" },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Text(
-                    text = option.label,
-                    color = if (isSelected) ColorOnAccentDark else ColorTextPillUnselected,
+                    text = selected.label,
+                    color = ColorTextPrimary,
                     fontSize = 12.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     softWrap = false,
                 )
+                if (segmentationStatus == SegmentationStatus.UNAVAILABLE) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(ColorRecordAccent),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Image(
+                painter = painterResource(id = R.drawable.ic_chevron_down),
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            containerColor = ColorSurfaceDark,
+        ) {
+            EffectTargetPass.entries.forEach { option ->
+                val isSelected = option == selected
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option.label,
+                            color = if (isSelected) ColorAccentLime else ColorTextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
+                )
+            }
+
+            if (selected.requiresSegmentation) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(ColorDivider),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SegmentationStatusIcon(status = segmentationStatus)
+                    Text(
+                        text = statusDescription,
+                        color = if (segmentationStatus == SegmentationStatus.UNAVAILABLE) {
+                            ColorRecordAccent
+                        } else {
+                            ColorTextSecondary
+                        },
+                        fontSize = 11.sp,
+                    )
+                }
             }
         }
     }
+}
+
+private fun segmentationStatusLabel(status: SegmentationStatus): String = when (status) {
+    SegmentationStatus.DETECTED -> "人物検出中"
+    SegmentationStatus.NO_SUBJECT -> "人物未検出"
+    SegmentationStatus.INACTIVE -> "セグメンテーション無効"
+    SegmentationStatus.UNAVAILABLE -> "セグメンテーション利用不可"
 }
 
 @Composable
@@ -668,33 +928,26 @@ private fun SegmentationStatusIcon(
     status: SegmentationStatus,
     modifier: Modifier = Modifier,
 ) {
-    val description = when (status) {
-        SegmentationStatus.DETECTED -> "人物検出中"
-        SegmentationStatus.NO_SUBJECT -> "人物未検出"
-        SegmentationStatus.INACTIVE -> "セグメンテーション無効"
-        SegmentationStatus.UNAVAILABLE -> "セグメンテーション利用不可"
-    }
+    val description = segmentationStatusLabel(status)
     val silhouetteColor = when (status) {
         SegmentationStatus.DETECTED -> ColorAccentLime
-        SegmentationStatus.NO_SUBJECT -> ColorTextResolutionLabel.copy(alpha = 0.78f)
-        SegmentationStatus.INACTIVE -> ColorTextResolutionLabel.copy(alpha = 0.42f)
+        SegmentationStatus.NO_SUBJECT -> ColorTextSecondary
+        SegmentationStatus.INACTIVE -> ColorTextSecondary.copy(alpha = 0.45f)
         SegmentationStatus.UNAVAILABLE -> ColorRecordAccent.copy(alpha = 0.85f)
     }
     val shouldersPath = remember { Path() }
     Canvas(
         modifier = modifier
-            .size(22.dp)
+            .size(18.dp)
             .semantics { contentDescription = description },
     ) {
         val w = size.width
         val h = size.height
-        // Head silhouette
         drawCircle(
             color = silhouetteColor,
             radius = w * 0.17f,
             center = Offset(w * 0.46f, h * 0.31f),
         )
-        // Upper torso and shoulders dome
         shouldersPath.reset()
         shouldersPath.moveTo(w * 0.14f, h * 0.84f)
         shouldersPath.cubicTo(
@@ -717,17 +970,17 @@ private fun SegmentationStatusIcon(
                 val start = Offset(w * 0.14f, h * 0.18f)
                 val end = Offset(w * 0.84f, h * 0.86f)
                 drawLine(
-                    color = ColorOverlayPill,
+                    color = ColorSurfaceDark,
                     start = start,
                     end = end,
-                    strokeWidth = 3.dp.toPx(),
+                    strokeWidth = 2.6.dp.toPx(),
                     cap = StrokeCap.Round,
                 )
                 drawLine(
                     color = ColorRecordAccent,
                     start = start,
                     end = end,
-                    strokeWidth = 1.6.dp.toPx(),
+                    strokeWidth = 1.5.dp.toPx(),
                     cap = StrokeCap.Round,
                 )
             }
@@ -746,11 +999,12 @@ private fun LensZoomSelectorPill(
 ) {
     Row(
         modifier = modifier
-            .width(110.dp)
-            .height(28.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(ColorOverlayPill)
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .width(144.dp)
+            .height(40.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(ColorSurfaceDark)
+            .padding(horizontal = 6.dp)
+            .selectableGroup(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -758,18 +1012,22 @@ private fun LensZoomSelectorPill(
             val isSelected = option == selected
             Box(
                 modifier = Modifier
-                    .width(34.dp)
-                    .height(24.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .width(38.dp)
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(if (isSelected) ColorAccentLime else Color.Transparent)
-                    .clickable { onSelect(option) },
+                    .selectable(
+                        selected = isSelected,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(option) },
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = if (isSelected) option.selectedLabel else option.unselectedLabel,
-                    color = if (isSelected) ColorOnAccentDark else ColorTextLensUnselected,
-                    fontSize = 11.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (isSelected) ColorOnAccentDark else ColorTextSecondary,
+                    fontSize = if (isSelected) 13.sp else 12.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 )
             }
         }
@@ -799,44 +1057,38 @@ private fun FpsBadgePill(
 
     Box(
         modifier = modifier
-            .height(28.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(ColorOverlayPill)
-            .padding(horizontal = 14.dp)
+            .defaultMinSize(minWidth = 62.dp)
+            .height(24.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(ColorSurfaceDark)
+            .padding(horizontal = 12.dp)
             .semantics { contentDescription = perfDesc },
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = fpsText,
             color = ColorTextPrimary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Normal,
         )
     }
 }
 
 @Composable
-private fun CaptureControlsBar(
+private fun CaptureControlsPanel(
+    style: CaptureControlsStyle,
     isRecording: Boolean,
-    isFoldable: Boolean,
     onToggleRecording: () -> Unit,
     onCapturePng: () -> Unit,
     onToggleLens: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val barHeight = if (isFoldable) 108.dp else 94.dp
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(barHeight)
-            .background(ColorBgPrimary),
-        horizontalArrangement = Arrangement.spacedBy(55.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Record video button (node 2:46 / 2:90)
+    val videoButton: @Composable () -> Unit = {
         Box(
             modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
+                .background(ColorSurfaceDark)
                 .then(
                     if (isRecording) {
                         Modifier.border(2.dp, ColorRecordAccent, CircleShape)
@@ -845,41 +1097,61 @@ private fun CaptureControlsBar(
                     },
                 )
                 .clickable(onClick = onToggleRecording),
-            contentAlignment = Alignment.Center,
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_video_record),
+                painter = painterResource(id = R.drawable.ic_video_mode),
                 contentDescription = if (isRecording) "録画を停止" else "録画を開始",
-                modifier = Modifier.size(46.dp),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(22.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 6.dp, end = 11.dp)
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(if (isRecording) ColorRecordAccent else ColorAccentLime),
             )
         }
+    }
 
-        // Photo shutter button (nodes 2:51 + 2:52 / 2:95 + 2:96)
-        Box(
-            modifier = Modifier
-                .size(62.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onCapturePng),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_shutter_outer),
-                contentDescription = "写真を撮影",
-                modifier = Modifier.size(62.dp),
-            )
-            Image(
-                painter = painterResource(id = R.drawable.ic_shutter_inner),
-                contentDescription = null,
-                modifier = Modifier.size(52.dp),
+    val shutterControl: @Composable () -> Unit = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(66.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onCapturePng),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_shutter_outer),
+                    contentDescription = "写真を撮影",
+                    modifier = Modifier.size(66.dp),
+                )
+                Image(
+                    painter = painterResource(id = R.drawable.ic_shutter_inner),
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "写真",
+                color = ColorAccentLime,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
+    }
 
-        // Camera flip button (node 2:53 / 2:97)
+    val switchCameraButton: @Composable () -> Unit = {
         Box(
             modifier = Modifier
                 .size(46.dp)
                 .clip(CircleShape)
-                .background(ColorCaptureSecondary)
+                .background(ColorSurfaceDark)
                 .clickable(onClick = onToggleLens),
             contentAlignment = Alignment.Center,
         ) {
@@ -890,12 +1162,183 @@ private fun CaptureControlsBar(
             )
         }
     }
+
+    when (style) {
+        CaptureControlsStyle.COMPACT_BAR -> {
+            Row(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .background(ColorBgPrimary),
+                horizontalArrangement = Arrangement.spacedBy(61.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                videoButton()
+                shutterControl()
+                switchCameraButton()
+            }
+        }
+
+        CaptureControlsStyle.MEDIUM_PLUS_CARD -> {
+            Row(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .height(110.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(ColorSurfaceDark)
+                    .padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                videoButton()
+                shutterControl()
+                switchCameraButton()
+            }
+        }
+
+        CaptureControlsStyle.TABLETOP_CARD -> {
+            Column(
+                modifier = modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(ColorSurfaceDark),
+                verticalArrangement = Arrangement.SpaceEvenly,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                videoButton()
+                shutterControl()
+                switchCameraButton()
+            }
+        }
+    }
 }
 
 @Composable
-private fun FilterStudioSection(
+private fun CompactFilterBottomSheetOverlay(
+    visible: Boolean,
     state: GlitchUiState,
-    isFoldable: Boolean,
+    onDismiss: () -> Unit,
+    onOpenEngineSettings: () -> Unit,
+    onSelectControlMode: (ControlMode) -> Unit,
+    onSelectPreset: (RecipePreset) -> Unit,
+    onSelectFilter: (FilterInfo) -> Unit,
+    onUpdateParam: (String, String) -> Unit,
+    onResetParams: () -> Unit,
+) {
+    BackHandler(enabled = visible, onBack = onDismiss)
+
+    val density = LocalDensity.current
+    val dismissThresholdPx = with(density) { 72.dp.toPx() }
+    var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+
+    LaunchedEffect(visible) {
+        if (visible) {
+            dragOffsetPx = 0f
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(ColorModalBackdrop)
+                    .semantics {
+                        contentDescription = "フィルターシートを閉じる"
+                        onClick(label = "閉じる") {
+                            onDismiss()
+                            true
+                        }
+                    }
+                    .pointerInput(onDismiss) {
+                        detectTapGestures { onDismiss() }
+                    },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = visible,
+            enter = slideInVertically { it },
+            exit = slideOutVertically { it },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { translationY = dragOffsetPx }
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(ColorSurfaceDark)
+                    .pointerInput(Unit) {
+                        detectTapGestures { }
+                    },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics {
+                            contentDescription = "ドラッグしてフィルターシートを閉じる"
+                            onClick(label = "閉じる") {
+                                onDismiss()
+                                true
+                            }
+                        }
+                        .pointerInput(dismissThresholdPx) {
+                            detectVerticalDragGestures(
+                                onDragEnd = {
+                                    if (dragOffsetPx > dismissThresholdPx) {
+                                        onDismiss()
+                                    } else {
+                                        dragOffsetPx = 0f
+                                    }
+                                },
+                                onDragCancel = { dragOffsetPx = 0f },
+                                onVerticalDrag = { _, dragAmount ->
+                                    dragOffsetPx = (dragOffsetPx + dragAmount).coerceAtLeast(0f)
+                                },
+                            )
+                        }
+                        .padding(top = 10.dp, bottom = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(ColorDragHandle),
+                    )
+                }
+
+                FilterPanelContent(
+                    state = state,
+                    layoutMode = PixelfrayLayoutMode.COMPACT,
+                    showDoneButton = true,
+                    onDismiss = onDismiss,
+                    onOpenEngineSettings = onOpenEngineSettings,
+                    onSelectControlMode = onSelectControlMode,
+                    onSelectPreset = onSelectPreset,
+                    onSelectFilter = onSelectFilter,
+                    onUpdateParam = onUpdateParam,
+                    onResetParams = onResetParams,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterPanelContent(
+    state: GlitchUiState,
+    layoutMode: PixelfrayLayoutMode,
+    showDoneButton: Boolean,
+    onDismiss: () -> Unit,
+    onOpenEngineSettings: () -> Unit,
     onSelectControlMode: (ControlMode) -> Unit,
     onSelectPreset: (RecipePreset) -> Unit,
     onSelectFilter: (FilterInfo) -> Unit,
@@ -903,64 +1346,105 @@ private fun FilterStudioSection(
     onResetParams: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val topPadding = if (layoutMode == PixelfrayLayoutMode.COMPACT) 4.dp else 24.dp
+    val bottomPadding = if (layoutMode == PixelfrayLayoutMode.COMPACT) 0.dp else 20.dp
+
     Column(
-        modifier = modifier
-            .background(ColorStudioSurface)
-            .padding(
-                start = 20.dp,
-                end = 20.dp,
-                top = if (isFoldable) 20.dp else 12.dp,
-                bottom = 12.dp,
-            ),
+        modifier = modifier.padding(
+            start = 16.dp,
+            end = 16.dp,
+            top = topPadding,
+            bottom = bottomPadding,
+        ),
     ) {
-        // Header row: "フィルター" + "適用中" badge (nodes 2:103, 2:104 / 2:138, 2:139)
+        // Header row: "フィルター" + Applied indicator + Engine Settings + optional "完了" button
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "フィルター",
-                color = ColorTextHeader,
-                fontSize = 16.sp,
+                color = ColorTextPrimary,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
             )
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             val isEffectActive = state.effectPass != EffectTargetPass.NONE
             Row(
                 modifier = Modifier
-                    .height(24.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (isEffectActive) ColorStatusBadgeBg else ColorSegmentedBg)
-                    .padding(horizontal = 10.dp),
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ColorSurfaceElevated)
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_status_dot),
-                    contentDescription = null,
-                    modifier = Modifier.size(5.dp),
-                    alpha = if (isEffectActive) 1f else 0.4f,
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(if (isEffectActive) ColorAccentLime else ColorTextSecondary),
                 )
                 Text(
                     text = if (isEffectActive) "適用中" else "オフ",
-                    color = if (isEffectActive) ColorAccentLime else ColorTextTabUnselected,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
+                    color = if (isEffectActive) ColorAccentLime else ColorTextSecondary,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Normal,
                 )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(ColorSurfaceElevated)
+                    .clickable(onClick = onOpenEngineSettings),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_settings),
+                    contentDescription = "エンジン設定",
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+
+            if (showDoneButton) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 60.dp)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ColorSurfaceElevated)
+                        .clickable(onClick = onDismiss)
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "完了",
+                        color = ColorAccentLime,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Segmented tab bar: "プリセット" / "シングル" (node 2:107 / 2:142)
+        // Segmented tab bar: "プリセット" / "シングル"
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(ColorSegmentedBg)
-                .padding(4.dp),
+                .height(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(ColorSurfaceElevated)
+                .padding(3.dp)
+                .selectableGroup(),
         ) {
             ControlMode.entries.forEach { mode ->
                 val isSelected = state.controlMode == mode
@@ -968,160 +1452,323 @@ private fun FilterStudioSection(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(9.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(if (isSelected) ColorAccentLime else Color.Transparent)
-                        .clickable { onSelectControlMode(mode) },
+                        .selectable(
+                            selected = isSelected,
+                            role = Role.Tab,
+                            onClick = { onSelectControlMode(mode) },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = mode.label,
-                        color = if (isSelected) ColorOnAccentDark else ColorTextTabUnselected,
+                        color = if (isSelected) ColorOnAccentDark else ColorTextSecondary,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
-        // Horizontal filter thumbnail cards (nodes 2:111..2:121 / 2:146..2:156)
-        val cardWidth = if (isFoldable) 74.dp else 84.dp
-        val cardHeight = if (isFoldable) 84.dp else 64.dp
-        val labelFontSize = if (isFoldable) 10.sp else 11.sp
-
-        if (state.controlMode == ControlMode.PRESETS) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                RecipePresets.curated.forEach { preset ->
-                    val isSelected = state.selectedPreset.id == preset.id
-                    FilterThumbnailCard(
-                        title = preset.title,
-                        thumbnail = state.presetThumbnails[preset.id] ?: state.fallbackPreviewBitmap,
-                        isSelected = isSelected,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        labelFontSize = labelFontSize,
-                        onClick = { onSelectPreset(preset) },
-                    )
-                }
-            }
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                state.availableFilters.forEach { filter ->
-                    val isSelected = state.selectedFilter?.name == filter.name
-                    FilterThumbnailCard(
-                        title = filter.name,
-                        thumbnail = state.filterThumbnails[filter.name] ?: state.fallbackPreviewBitmap,
-                        isSelected = isSelected,
-                        cardWidth = cardWidth,
-                        cardHeight = cardHeight,
-                        labelFontSize = labelFontSize,
-                        onClick = { onSelectFilter(filter) },
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Section divider (node 2:122 / 2:157)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(ColorDivider),
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Detail & parameter controls area
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            if (state.controlMode == ControlMode.PRESETS) {
-                Text(
-                    text = state.selectedPreset.title,
-                    color = ColorTextHeader,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = state.selectedPreset.subtitle,
-                    color = ColorTextNote,
-                    fontSize = 12.sp,
-                )
-            } else {
-                val filter = state.selectedFilter
-                if (filter != null) {
+        when (layoutMode) {
+            PixelfrayLayoutMode.COMPACT -> {
+                if (state.controlMode == ControlMode.PRESETS) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(
-                            text = filter.name,
-                            color = ColorTextHeader,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = "リセット",
-                            color = ColorTextReset,
-                            fontSize = 11.sp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable(onClick = onResetParams)
-                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                        RecipePresets.curated.forEach { preset ->
+                            FilterThumbnailCard(
+                                title = preset.title,
+                                thumbnail = state.presetThumbnails[preset.id] ?: state.fallbackPreviewBitmap,
+                                isSelected = state.selectedPreset.id == preset.id,
+                                labelFontSize = 11.sp,
+                                badgeInset = 4.dp,
+                                onClick = { onSelectPreset(preset) },
+                                modifier = Modifier.width(81.dp),
+                                imageModifier = Modifier
+                                    .width(81.dp)
+                                    .height(82.dp),
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        state.availableFilters.forEach { filter ->
+                            FilterThumbnailCard(
+                                title = filter.name,
+                                thumbnail = state.filterThumbnails[filter.name] ?: state.fallbackPreviewBitmap,
+                                isSelected = state.selectedFilter?.name == filter.name,
+                                labelFontSize = 11.sp,
+                                badgeInset = 4.dp,
+                                onClick = { onSelectFilter(filter) },
+                                modifier = Modifier.width(81.dp),
+                                imageModifier = Modifier
+                                    .width(81.dp)
+                                    .height(82.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(ColorDivider),
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        SingleFilterDetailControls(
+                            state = state,
+                            onUpdateParam = onUpdateParam,
+                            onResetParams = onResetParams,
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = filter.doc,
-                        color = ColorTextNote,
-                        fontSize = 11.sp,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        filter.params.forEach { param ->
-                            PixelfrayParameterControl(
-                                param = param,
-                                currentValue = state.filterParams[param.name]
-                                    ?: RecipePresets.defaultParamValue(filter, param),
-                                onValueChange = { newVal -> onUpdateParam(param.name, newVal) },
+                Spacer(modifier = Modifier.height(18.dp))
+            }
+
+            PixelfrayLayoutMode.MEDIUM_PLUS -> {
+                if (state.controlMode == ControlMode.PRESETS) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        val rows = RecipePresets.curated.chunked(2)
+                        rows.forEach { pair ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                pair.forEach { preset ->
+                                    FilterThumbnailCard(
+                                        title = preset.title,
+                                        thumbnail = state.presetThumbnails[preset.id] ?: state.fallbackPreviewBitmap,
+                                        isSelected = state.selectedPreset.id == preset.id,
+                                        labelFontSize = 12.sp,
+                                        badgeInset = 6.dp,
+                                        onClick = { onSelectPreset(preset) },
+                                        modifier = Modifier.weight(1f),
+                                        imageModifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(136f / 132f),
+                                    )
+                                }
+                                if (pair.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            state.availableFilters.forEach { filter ->
+                                FilterThumbnailCard(
+                                    title = filter.name,
+                                    thumbnail = state.filterThumbnails[filter.name] ?: state.fallbackPreviewBitmap,
+                                    isSelected = state.selectedFilter?.name == filter.name,
+                                    labelFontSize = 11.sp,
+                                    badgeInset = 4.dp,
+                                    onClick = { onSelectFilter(filter) },
+                                    modifier = Modifier.width(76.dp),
+                                    imageModifier = Modifier.size(76.dp),
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(ColorDivider),
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                        ) {
+                            SingleFilterDetailControls(
+                                state = state,
+                                onUpdateParam = onUpdateParam,
+                                onResetParams = onResetParams,
                             )
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            PixelfrayLayoutMode.TABLETOP -> {
+                if (state.controlMode == ControlMode.PRESETS) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            RecipePresets.curated.forEach { preset ->
+                                FilterThumbnailCard(
+                                    title = preset.title,
+                                    thumbnail = state.presetThumbnails[preset.id] ?: state.fallbackPreviewBitmap,
+                                    isSelected = state.selectedPreset.id == preset.id,
+                                    labelFontSize = 12.sp,
+                                    badgeInset = 6.dp,
+                                    onClick = { onSelectPreset(preset) },
+                                    modifier = Modifier.width(124.dp),
+                                    imageModifier = Modifier.size(124.dp),
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            state.availableFilters.forEach { filter ->
+                                FilterThumbnailCard(
+                                    title = filter.name,
+                                    thumbnail = state.filterThumbnails[filter.name] ?: state.fallbackPreviewBitmap,
+                                    isSelected = state.selectedFilter?.name == filter.name,
+                                    labelFontSize = 11.sp,
+                                    badgeInset = 4.dp,
+                                    onClick = { onSelectFilter(filter) },
+                                    modifier = Modifier.width(80.dp),
+                                    imageModifier = Modifier.size(80.dp),
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(ColorDivider),
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        SingleFilterDetailControls(
+                            state = state,
+                            onUpdateParam = onUpdateParam,
+                            onResetParams = onResetParams,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Footer note (node 2:137 / 2:181)
         Text(
             text = if (state.controlMode == ControlMode.PRESETS) {
-                "フィルターは撮影した写真・動画に適用されます"
+                "フィルターは写真・動画に適用されます"
             } else {
                 "変更はプレビューにリアルタイムで反映されます"
             },
-            color = ColorTextNote,
-            fontSize = 10.sp,
+            color = ColorTextSecondary,
+            fontSize = 11.sp,
         )
+    }
+}
+
+@Composable
+private fun SingleFilterDetailControls(
+    state: GlitchUiState,
+    onUpdateParam: (String, String) -> Unit,
+    onResetParams: () -> Unit,
+) {
+    val filter = state.selectedFilter ?: return
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = filter.name,
+            color = ColorTextPrimary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = "リセット",
+            color = ColorTextSecondary,
+            fontSize = 11.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onResetParams)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+    Spacer(modifier = Modifier.height(6.dp))
+    Text(
+        text = filter.doc,
+        color = ColorTextSecondary,
+        fontSize = 11.sp,
+    )
+    Spacer(modifier = Modifier.height(14.dp))
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        filter.params.forEach { param ->
+            key(filter.name, param.name) {
+                PixelfrayParameterControl(
+                    param = param,
+                    currentValue = state.filterParams[param.name]
+                        ?: RecipePresets.defaultParamValue(filter, param),
+                    onValueChange = { newVal -> onUpdateParam(param.name, newVal) },
+                )
+            }
+        }
     }
 }
 
@@ -1130,25 +1777,26 @@ private fun FilterThumbnailCard(
     title: String,
     thumbnail: Bitmap?,
     isSelected: Boolean,
-    cardWidth: androidx.compose.ui.unit.Dp,
-    cardHeight: androidx.compose.ui.unit.Dp,
-    labelFontSize: androidx.compose.ui.unit.TextUnit,
+    labelFontSize: TextUnit,
+    badgeInset: Dp,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    imageModifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier
-            .width(cardWidth)
-            .clickable(onClick = onClick),
+        modifier = modifier.selectable(
+            selected = isSelected,
+            role = Role.RadioButton,
+            onClick = onClick,
+        ),
     ) {
         Box(
-            modifier = Modifier
-                .width(cardWidth)
-                .height(cardHeight)
-                .clip(RoundedCornerShape(10.dp))
-                .background(ColorCameraSurface)
+            modifier = imageModifier
+                .clip(RoundedCornerShape(9.dp))
+                .background(ColorSurfaceDark)
                 .then(
                     if (isSelected) {
-                        Modifier.border(2.dp, ColorAccentLime, RoundedCornerShape(10.dp))
+                        Modifier.border(2.dp, ColorAccentLime, RoundedCornerShape(9.dp))
                     } else {
                         Modifier
                     },
@@ -1181,7 +1829,7 @@ private fun FilterThumbnailCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 5.dp, end = 5.dp)
+                        .padding(top = badgeInset, end = badgeInset)
                         .size(18.dp)
                         .clip(CircleShape)
                         .background(ColorAccentLime),
@@ -1190,19 +1838,19 @@ private fun FilterThumbnailCard(
                     Image(
                         painter = painterResource(id = R.drawable.ic_selected_check),
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(12.dp),
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Text(
             text = title,
-            color = if (isSelected) ColorAccentLime else ColorTextCardUnselected,
+            color = if (isSelected) ColorAccentLime else ColorTextSecondary,
             fontSize = labelFontSize,
-            fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -1252,7 +1900,7 @@ private fun PixelfrayParameterControl(
                 ) {
                     Text(
                         text = param.name,
-                        color = ColorTextSecondary,
+                        color = ColorTextPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -1276,14 +1924,14 @@ private fun PixelfrayParameterControl(
                             modifier = Modifier
                                 .height(30.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) ColorAccentLime else ColorSegmentedBg)
+                                .background(if (isSelected) ColorAccentLime else ColorSurfaceElevated)
                                 .clickable { onValueChange(choice) }
                                 .padding(horizontal = 12.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = choice,
-                                color = if (isSelected) ColorOnAccentDark else ColorTextTabUnselected,
+                                color = if (isSelected) ColorOnAccentDark else ColorTextSecondary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -1307,11 +1955,21 @@ private fun PixelfraySliderRow(
     val fraction = ((value - valueRange.start) / span).coerceIn(0f, 1f)
     var trackWidthPx by remember { mutableFloatStateOf(1f) }
     val density = LocalDensity.current
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp),
+            .height(50.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$label: $valueText"
+                progressBarRangeInfo = ProgressBarRangeInfo(value, valueRange)
+                setProgress { target ->
+                    val clamped = target.coerceIn(valueRange.start, valueRange.endInclusive)
+                    currentOnValueChange(clamped)
+                    true
+                }
+            },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1320,7 +1978,7 @@ private fun PixelfraySliderRow(
         ) {
             Text(
                 text = label,
-                color = ColorTextSecondary,
+                color = ColorTextPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
@@ -1344,14 +2002,14 @@ private fun PixelfraySliderRow(
                 .pointerInput(valueRange) {
                     detectTapGestures { offset ->
                         val f = (offset.x / trackWidthPx).coerceIn(0f, 1f)
-                        onValueChange(valueRange.start + f * span)
+                        currentOnValueChange(valueRange.start + f * span)
                     }
                 }
                 .pointerInput(valueRange) {
                     detectHorizontalDragGestures { change, _ ->
                         change.consume()
                         val f = (change.position.x / trackWidthPx).coerceIn(0f, 1f)
-                        onValueChange(valueRange.start + f * span)
+                        currentOnValueChange(valueRange.start + f * span)
                     }
                 },
             contentAlignment = Alignment.CenterStart,
@@ -1365,7 +2023,7 @@ private fun PixelfraySliderRow(
                     .background(ColorTrackInactive),
             )
 
-            // Active track (4dp height, #E1EDB0)
+            // Active track (4dp height, #E1EDAE)
             Box(
                 modifier = Modifier
                     .fillMaxWidth(fraction)
@@ -1383,7 +2041,7 @@ private fun PixelfraySliderRow(
             }
             Image(
                 painter = painterResource(id = R.drawable.ic_slider_thumb),
-                contentDescription = "Adjust $label",
+                contentDescription = null,
                 modifier = Modifier
                     .offset(x = thumbOffsetDp)
                     .size(16.dp),
@@ -1410,7 +2068,7 @@ private fun EngineSettingsSheetContent(
     ) {
         Text(
             text = "エンジン設定",
-            color = ColorTextHeader,
+            color = ColorTextPrimary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -1434,14 +2092,14 @@ private fun EngineSettingsSheetContent(
                         modifier = Modifier
                             .height(34.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) ColorAccentLime else ColorSegmentedBg)
+                            .background(if (isSelected) ColorAccentLime else ColorSurfaceElevated)
                             .clickable { onSelectPngFilter(option) }
                             .padding(horizontal = 14.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = option.label,
-                            color = if (isSelected) ColorOnAccentDark else ColorTextTabUnselected,
+                            color = if (isSelected) ColorOnAccentDark else ColorTextSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                         )
@@ -1469,14 +2127,14 @@ private fun EngineSettingsSheetContent(
                     modifier = Modifier
                         .height(34.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isPerFrame) ColorAccentLime else ColorSegmentedBg)
+                        .background(if (isPerFrame) ColorAccentLime else ColorSurfaceElevated)
                         .clickable { onSelectSeedMode(SeedMode.PER_FRAME) }
                         .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "PerFrame",
-                        color = if (isPerFrame) ColorOnAccentDark else ColorTextTabUnselected,
+                        color = if (isPerFrame) ColorOnAccentDark else ColorTextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -1487,14 +2145,14 @@ private fun EngineSettingsSheetContent(
                     modifier = Modifier
                         .height(34.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (isFixed) ColorAccentLime else ColorSegmentedBg)
+                        .background(if (isFixed) ColorAccentLime else ColorSurfaceElevated)
                         .clickable { onSelectSeedMode(SeedMode.FIXED) }
                         .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "Fixed ($seed)",
-                        color = if (isFixed) ColorOnAccentDark else ColorTextTabUnselected,
+                        color = if (isFixed) ColorOnAccentDark else ColorTextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                     )
@@ -1539,7 +2197,7 @@ private fun FrameStatsText(previewFrame: State<PreviewFrame>) {
                 frame.processingTimeMs,
                 frame.displayFps,
             ),
-            color = ColorTextNote,
+            color = ColorTextSecondary,
             fontSize = 11.sp,
         )
     }
