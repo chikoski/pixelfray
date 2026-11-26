@@ -1,8 +1,10 @@
 package info.chikoski.pixelfray
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdaptiveLayoutModeTest {
@@ -189,5 +191,32 @@ class AdaptiveLayoutModeTest {
         assertEquals(40, clampedBottom.hingeGapPx)
         assertEquals(0, clampedBottom.bottomPanePx)
         assertEquals(500, clampedBottom.topPanePx + clampedBottom.hingeGapPx + clampedBottom.bottomPanePx)
+    }
+
+    @Test
+    fun `shouldShowAppBar hides top bar only in tabletop mode`() {
+        assertTrue(shouldShowAppBar(PixelfrayLayoutMode.COMPACT))
+        assertTrue(shouldShowAppBar(PixelfrayLayoutMode.MEDIUM_PLUS))
+        assertFalse(shouldShowAppBar(PixelfrayLayoutMode.TABLETOP))
+    }
+
+    @Test
+    fun `root-measured tabletop split reserves entire upper pane above hinge when app bar is hidden`() {
+        val split = computeTabletopSplitPx(
+            contentTopPx = 0,
+            contentHeightPx = 900,
+            hingeTopPx = 438,
+            hingeBottomPx = 462,
+            minHingeGapPx = 24,
+            minPaneHeightPx = 240,
+        )
+
+        assertNotNull(split)
+        requireNotNull(split)
+        assertEquals(PixelfrayLayoutMode.TABLETOP, resolveLayoutMode(840f, split))
+        assertFalse(shouldShowAppBar(PixelfrayLayoutMode.TABLETOP))
+        assertEquals(438, split.topPanePx)
+        assertEquals(24, split.hingeGapPx)
+        assertEquals(438, split.bottomPanePx)
     }
 }
