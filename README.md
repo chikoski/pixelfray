@@ -1,6 +1,6 @@
 # Pixelfray
 
-`png-glitch` の WebAssembly コンポーネントである `png-glitch-component.wasm` と `wasm-component-kotlin` の Chicory バックエンドを組み合わせた Android カメラグリッチアプリです。カメラのライブ入力フレームに対して PNG 予測フィルタ破壊を含むグリッチエフェクトを適用し、プレビュー表示と PNG 静止画保存および MP4 動画録画を行います。
+`png-glitch` の WebAssembly コンポーネントである `png-glitch-component.wasm` と `wasm-component-kotlin` の既定 `AOT` バックエンドを組み合わせた Android カメラグリッチアプリです。カメラのライブ入力フレームに対して PNG 予測フィルタ破壊を含むグリッチエフェクトを適用し、プレビュー表示と PNG 静止画保存および MP4 動画録画を行います。
 
 ## セットアップと依存構成
 
@@ -10,7 +10,7 @@
 git clone --recursive https://github.com/chikoski/pixelfray.git
 ```
 
-`settings.gradle.kts` は `third_party/wasm-component-kotlin` を Composite Build として取り込み、`io.github.wasm2kt` プラグインと `runtime-chicory` を供給します。ローカルの別ディレクトリにある `wasm-component-kotlin` と並行開発する場合は、コマンドライン引数 `-Pwasm2ktDir=/path/to/wasm-component-kotlin` で参照先を上書きできます。
+`settings.gradle.kts` は `third_party/wasm-component-kotlin` を Composite Build として取り込み、`io.github.wasm2kt` プラグインと `runtime-aot` を供給します。ローカルの別ディレクトリにある `wasm-component-kotlin` と並行開発する場合は、コマンドライン引数 `-Pwasm2ktDir=/path/to/wasm-component-kotlin` で参照先を上書きできます。
 
 ビルド時は Gradle デーモン用に JDK 21 と Android SDK Platform 35 が必要です。`ANDROID_HOME` 環境変数または `local.properties` の `sdk.dir` に Android SDK のパスを設定してください。
 

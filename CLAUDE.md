@@ -6,7 +6,7 @@
 
 Pixelfray は Android 向けのカメラグリッチアプリです。カメラのライブ入力フレームに対して PNG 予測フィルタ破壊を含むグリッチエフェクトを適用し、プレビュー表示と PNG 静止画保存および MP4 動画録画を行います。
 
-グリッチ処理は `png-glitch-component.wasm` を `wasm-component-kotlin` の Chicory バックエンド上で実行して実現します。前景と背景の分離には MediaPipe Tasks Vision の `ImageSegmenter` を使います。
+グリッチ処理は `png-glitch-component.wasm` を `wasm-component-kotlin` の既定 `AOT` バックエンド上で実行して実現します。前景と背景の分離には MediaPipe Tasks Vision の `ImageSegmenter` を使います。
 
 ## モジュール構成
 
@@ -19,7 +19,7 @@ Pixelfray は Android 向けのカメラグリッチアプリです。カメラ�
 
 `:app` は Jetpack Compose の UI、3 段フレームパイプライン、Wasm セッション管理、MediaPipe セグメンテーション、および MP4 録画を含む本体モジュールです。`:baselineprofile` はベースラインプロファイル生成と合成フレームによるベンチマーク計測を担当します。
 
-`third_party/wasm-component-kotlin` は Git サブモジュールであり、`settings.gradle.kts` の `includeBuild` により `io.github.wasm2kt` プラグインと `runtime-chicory` を提供します。`third_party/png-glitch` は Wasm コンポーネントのソースリポジトリであり、`app/src/main/wasm/png-glitch-component.wasm` を再生成するときに使用します。
+`third_party/wasm-component-kotlin` は Git サブモジュールであり、`settings.gradle.kts` の `includeBuild` により `io.github.wasm2kt` プラグインと `runtime-aot` を提供します。`third_party/png-glitch` は Wasm コンポーネントのソースリポジトリであり、`app/src/main/wasm/png-glitch-component.wasm` を再生成するときに使用します。
 
 ## コマンド
 
