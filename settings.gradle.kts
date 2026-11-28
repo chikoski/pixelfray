@@ -19,7 +19,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "pixelfray"
 
-// Substitutes io.github.wasm2kt:runtime-chicory with the wasm-component-kotlin submodule
+// Substitutes io.github.wasm2kt runtime artifacts (such as runtime-aot) with the wasm-component-kotlin submodule
 // (or a local checkout passed via -Pwasm2ktDir=/path/to/wasm-component-kotlin).
 val wasm2ktPath = providers.gradleProperty("wasm2ktDir").orNull ?: "third_party/wasm-component-kotlin"
 includeBuild(wasm2ktPath)
